@@ -2,19 +2,19 @@ library(shiny)
 shinyServer(function(input, output){
   basic.calc <- reactive({as.integer(input$basic.calc)})
   basic.amount <- reactive({as.numeric(input$basic.amount)})
-  basic.interest <- reactive({as.numeric(input$basic.interest)})
+  basic.interest <- reactive({as.numeric(input$basic.interest) / 100})
   basic.time <- reactive({as.integer(input$basic.time)})
 
   inflation <- function(interest, time) {
-    (1 + interest/100) ^ time
+    (1 + interest) ^ time
   }
 
   present <- function(future, interest, time) {
-    future * inflation(interest, time)
+    future / inflation(interest, time)
   }
 
   future <- function(present, interest, time) {
-    present / inflation(interest, time)
+    present * inflation(interest, time)
   }
 
   value <- function(value_type, amount, interest, time) {
@@ -27,7 +27,7 @@ shinyServer(function(input, output){
 
   loan.calc <- reactive({as.integer(input$loan.calc)})
   loan.amount <- reactive({as.numeric(input$loan.amount)})
-  loan.interest <- reactive({as.numeric(input$loan.interest)})
+  loan.interest <- reactive({as.numeric(input$loan.interest) / 100})
   loan.time <- reactive({as.integer(input$loan.time)})
   loan.annuity <- reactive({as.integer(input$loan.annuity)})
 
@@ -35,9 +35,9 @@ shinyServer(function(input, output){
     inf <- inflation(interest, time)
     inf2 <- inf
     if(!ordinary) {
-      inf2 <- inf / (1 + interest/100)
+      inf2 <- inf / (1 + interest)
     }
-    amount * (interest/100) * inf2 / (inf - 1)
+    amount * (interest) * inf2 / (inf - 1)
   }
 
   periods.calc <- function(calc) {
@@ -59,7 +59,7 @@ shinyServer(function(input, output){
     balance <- amount
     cum_interest <- 0
     for(i in 1:t) {
-      interest_paid <- balance * int / 100
+      interest_paid <- balance * int
       principal_repaid <- instalment - interest_paid
       ending_balance <- balance - principal_repaid
       cum_interest <- cum_interest + interest_paid
@@ -69,9 +69,17 @@ shinyServer(function(input, output){
     table
   }
 
+  loan.plot <- function(calc, amount, interest, time, annuity) {
+    table <- loan.table(calc, amount, interest, time, annuity)
+    plot(1, xlab = "Time Period", ylab = "Amount", type = "l", xlim = c(0, max(table$Year)), ylim = c(0, max(table$Instalment)))
+    lines(table$Year, table$InterestPaid, col = "magenta", lwd = 2, type = "o")
+    lines(table$Year, table$PrincipalRepayment, col = "yellowgreen", lwd = 2, type = "o")
+    legend(1, max(table$Instalment), c("InterestPaid", "PrincipalRepayment"), cex = 0.8, col = c("magenta", "yellowgreen"), lty = c(1, 1))
+  }
+
   basic.p.present <- reactive({as.numeric(input$basic.p.present)})
   basic.p.future <- reactive({as.numeric(input$basic.p.future)})
-  basic.p.interest <- reactive({as.numeric(input$basic.p.interest)})
+  basic.p.interest <- reactive({as.numeric(input$basic.p.interest) / 100})
 
   periods <- function(present, future, interest) {
     log((future / present), base = inflation(interest, 1))
@@ -98,7 +106,7 @@ shinyServer(function(input, output){
     if(annuity == 0) {
       inf1 <- inflation(interest, 1)
     }
-    cont * ((inf1 * (inf - 1))/(interest/100))
+    cont * ((inf1 * (inf - 1))/interest)
   }
 
   growth <- function(amount, cont, interest, time, calc, annuity) {
@@ -109,9 +117,17 @@ shinyServer(function(input, output){
     amount * inf + growth.contribution(cont, int, t, annuity)
   }
 
+  growth.plot <- function(amount, cont, interest, time, calc, annuity) {
+    values <- sapply(0 : time, function(t) { growth(amount, cont, interest, t, calc, annuity) })
+    plot(1, xlab = "Time Period", ylab = "Accrual Amount", type = "l", xlim = c(0, time), ylim = c(amount, max(values)))
+    lines(0 : time, values, col = "magenta", lwd = 2, type = "o")
+  }
+
   output$basic.value <- renderText({ value(basic.calc(), basic.amount(), basic.interest(), basic.time()) })
   output$loan.table <- renderTable({ loan.table(loan.calc(), loan.amount(), loan.interest(), loan.time(), loan.annuity()) })
+  output$loan.plot <- renderPlot({ loan.plot(loan.calc(), loan.amount(), loan.interest(), loan.time(), loan.annuity()) })
   output$basic.period <- renderText({ periods(basic.p.present(), basic.p.future(), basic.p.interest()) })
   output$basic.rate <- renderText({ paste(rate(basic.r.present(), basic.r.future(), basic.r.periods()), "%") })
   output$inv.value <- renderText({ growth(inv.amount(), inv.cont(), inv.interest(), inv.time(), inv.calc(), inv.annuity()) })
+  output$inv.plot <- renderPlot({ growth.plot(inv.amount(), inv.cont(), inv.interest(), inv.time(), inv.calc(), inv.annuity()) })
 })
